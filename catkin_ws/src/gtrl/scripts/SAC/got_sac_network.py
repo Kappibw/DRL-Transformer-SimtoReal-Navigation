@@ -13,7 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal
-from SAC.GoalFormer import GoT
+from .GoalFormer import GoT
 
 LOG_SIG_MAX = 2
 LOG_SIG_MIN = -20
@@ -178,14 +178,14 @@ class GoTPolicy(nn.Module):
         super(GoTPolicy, self).__init__()
 
         self.trans = GoT(
-            image_size = (128, 160),
-            patch_size = (16, 20),
+            image_size = (128, 128),
+            patch_size = (16, 16),
             num_classes = 2,
             dim = 32,
             depth = block,
             heads = head,
             mlp_dim = 2048,
-            channels = 4
+            channels = 3
         )
         
         self.fc_embed = nn.Linear(nb_pstate, 32)
@@ -238,6 +238,24 @@ class GoTPolicy(nn.Module):
         log_prob = log_prob.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
+    
+    def sample_omnidir(self, inp):
+        istate, pstate = inp
+        x1 = istate  # Image input
+        x2 = pstate  # Goal input
+
+        # Embed the goal
+        x2 = self.fc_embed(x2)  # Shape: [batch_size, 32]
+
+        # Get goal-conditioned image embedding from the transformer
+        latent_features = self.trans.forward(x1, x2)  # Shape: [batch_size, 32]
+
+        # Optionally pass through additional layers for further processing
+        x = F.relu(self.fc1(latent_features))
+        x = F.relu(self.fc2(x))
+
+        # Return the goal-conditioned image embedding
+        return x
 
     def to(self, device):
         self.action_scale = self.action_scale.to(device)
