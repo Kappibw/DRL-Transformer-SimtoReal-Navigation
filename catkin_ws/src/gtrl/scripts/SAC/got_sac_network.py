@@ -208,21 +208,26 @@ class GoTPolicy(nn.Module):
             self.action_bias = torch.FloatTensor(
                 (action_space.high + action_space.low) / 2.)
 
-    def forward(self, inp):
+    def forward(self, inp, return_attention=False):
         istate, pstate = inp
         x1 = istate
+        x2 = self.fc_embed(pstate)
 
-        x2 = pstate
-        x2 = self.fc_embed(x2)
-
+        # Get the latent features and attention map from the transformer
+        # if return_attention:
+        #     latent_features, attention_map = self.trans.forward(x1, x2, return_attention=True)
+        # else:
         latent_features = self.trans.forward(x1, x2)
-        
+
         x = F.relu(self.fc1(latent_features))
         x = F.relu(self.fc2(x))
-        
+
         mean = self.mean_linear(x)
         log_std = self.log_std_linear(x)
         log_std = torch.clamp(log_std, min=LOG_SIG_MIN, max=LOG_SIG_MAX)
+        
+        # if return_attention:
+        #     return mean, log_std, attention_map
         return mean, log_std
 
     def sample(self, inp):
@@ -239,22 +244,22 @@ class GoTPolicy(nn.Module):
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_prob, mean
     
-    def sample_omnidir(self, inp):
+    def sample_omnidir(self, inp, return_attention=False):
         istate, pstate = inp
         x1 = istate  # Image input
-        x2 = pstate  # Goal input
+        x2 = self.fc_embed(pstate)  # Goal input embedding
 
-        # Embed the goal
-        x2 = self.fc_embed(x2)  # Shape: [batch_size, 32]
+        # Get the goal-conditioned image embedding from the transformer
+        if return_attention:
+            latent_features, attention_map = self.trans.forward(x1, x2, return_attention=True)
+        else:
+            latent_features = self.trans.forward(x1, x2)
 
-        # Get goal-conditioned image embedding from the transformer
-        latent_features = self.trans.forward(x1, x2)  # Shape: [batch_size, 32]
-
-        # Optionally pass through additional layers for further processing
         x = F.relu(self.fc1(latent_features))
         x = F.relu(self.fc2(x))
-
-        # Return the goal-conditioned image embedding
+        
+        if return_attention:
+            return x, attention_map
         return x
 
     def to(self, device):
