@@ -1,2 +1,7 @@
-# Pycache
-*__pycache__/*
+# Python
+.DS_Store
+**/*.egg-info/
+**/__pycache__/
+**/.pytest_cache/
+**/*.pyc
+**/*.pb
